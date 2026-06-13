@@ -18,7 +18,7 @@ using namespace Shared;
 AdxPreview::AdxPreview(QObject *parent) : QObject(parent), player(new QMediaPlayer(this))
 {
 	connect(player, &QMediaPlayer::mediaStatusChanged, this, &AdxPreview::onMediaStatusChanged);
-	connect(player, &QMediaPlayer::error, this, &AdxPreview::onPlayerError);
+	connect(player, static_cast<void (QMediaPlayer::*)(QMediaPlayer::Error)>(&QMediaPlayer::error), this, &AdxPreview::onPlayerError);
 }
 
 AdxPreview::~AdxPreview()

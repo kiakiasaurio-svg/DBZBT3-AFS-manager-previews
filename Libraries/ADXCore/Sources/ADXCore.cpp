@@ -1,21 +1,18 @@
-#ifndef _USE_MATH_DEFINES
-#define _USE_MATH_DEFINES
-#endif
-
 #include <ADXCore.h>
 
 #include <cmath>
 #include <cstring>
 #include <fstream>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 using namespace Shared;
 
 namespace
 {
+	/* Avoid relying on M_PI (not part of standard C++ and not guaranteed to be
+	 * defined by <cmath> on MSVC without _USE_MATH_DEFINES, which is fragile
+	 * with respect to header include order). */
+	constexpr double PI = 3.14159265358979323846;
+
 	/* ADX frames are 18 bytes: 2 bytes scale (big endian, signed) + 16 bytes (32 nibbles) of 4-bit samples */
 	constexpr int FRAME_SIZE = 18;
 	constexpr int SAMPLES_PER_FRAME = 32;
@@ -42,7 +39,7 @@ namespace
 			return;
 		}
 
-		double x = 2.0 * M_PI * static_cast<double>(highpassFrequency) / static_cast<double>(sampleRate);
+		double x = 2.0 * PI * static_cast<double>(highpassFrequency) / static_cast<double>(sampleRate);
 		double y = std::sqrt(2.0) - std::cos(x);
 		double z = y - std::sqrt((y + 1.0) * (1.0 - y));
 

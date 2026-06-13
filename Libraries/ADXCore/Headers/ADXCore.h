@@ -33,6 +33,11 @@ public:
 		bool unsupportedFormat;
 		bool corruptedContent;
 		bool badStream;
+
+		/* encoder-specific errors (used by encodeFromWAV) */
+		bool notWAV;
+		bool unsupportedWAV;
+		bool writeFailed;
 	};
 
 public:
@@ -65,6 +70,13 @@ public:
 
 	/* Quick (header-only) check whether a file looks like a CRI ADX file */
 	static bool isADX(const std::string &path);
+
+	/* Encode a 16-bit PCM WAV file (mono or stereo, any sample rate) into a
+	 * standard CRI ADX (type 03, 4-bit ADPCM) file. highpassFrequency controls
+	 * the prediction filter and defaults to the value commonly used by CRI tools.
+	 * Returns true on success, false otherwise (check ADX_File::Error for detail
+	 * via the optional outError pointer). */
+	static bool encodeFromWAV(const std::string &wavPath, const std::string &adxPath, uint16_t highpassFrequency = 500, Error *outError = nullptr);
 
 private:
 	bool decode(const std::vector<uint8_t> &raw);

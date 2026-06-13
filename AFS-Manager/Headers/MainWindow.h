@@ -43,7 +43,7 @@ private:
 
 	std::vector<uint32_t> getSelectedIndexes() const;
 
-	void startWorker(Shared::Type type, const std::map<uint32_t, std::string> &list, AFS_File *afs = nullptr);
+	void startWorker(Shared::Type type, const std::map<uint32_t, std::string> &list, AFS_File *afs = nullptr, const QString &cleanupPath = QString());
 
 private:
 	Ui::MainWindow *ui;
@@ -109,6 +109,8 @@ private slots:
 	void on_tableWidget_customContextMenuRequested(QPoint);
 
 	void on_actionPreview_triggered();
+
+	void on_actionConvertWAV_triggered();
 
 	void updatePreviewAvailability();
 

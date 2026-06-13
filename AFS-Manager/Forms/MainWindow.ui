@@ -313,6 +313,15 @@
     <string>Preview</string>
    </property>
   </action>
+  <action name="actionConvertWAV">
+   <property name="icon">
+    <iconset resource="../Resources/MainWindow.qrc">
+     <normaloff>:/Importer</normaloff>:/Importer</iconset>
+   </property>
+   <property name="text">
+    <string>Replace with WAV (convert to ADX)</string>
+   </property>
+  </action>
   <action name="actionOptimize">
    <property name="text">
     <string>Optimize</string>

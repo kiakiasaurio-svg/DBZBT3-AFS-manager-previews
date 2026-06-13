@@ -2,10 +2,15 @@
 #include <ui_MainWindow.h>
 
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QMimeData>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QUuid>
+#include <QStandardPaths>
 #include <QDebug>
 
 #include <algorithm>
@@ -15,6 +20,8 @@
 #include <MessageBox.h>
 #include <ProgressDialog.h>
 #include <ReservedSpaceDialog.h>
+
+#include <ADXCore.h>
 
 using namespace Shared;
 
@@ -442,7 +449,7 @@ std::vector<uint32_t> MainWindow::getSelectedIndexes() const
 	return rows;
 }
 
-void MainWindow::startWorker(Type type, const std::map<uint32_t, std::string> &list, AFS_File *afs)
+void MainWindow::startWorker(Type type, const std::map<uint32_t, std::string> &list, AFS_File *afs, const QString &cleanupPath)
 {
 	if (afs == nullptr) {
 		if (this->afs != nullptr) {
@@ -491,6 +498,13 @@ void MainWindow::startWorker(Type type, const std::map<uint32_t, std::string> &l
 
 	connect(worker, &Worker::done, worker, &Worker::deleteLater); // clean worker on finish
 	connect(worker, &Worker::destroyed, progressDialog, &ProgressDialog::deleteLater); // clean dialog after thread cleaned
+
+	if (!cleanupPath.isEmpty()) {
+		// remove a temporary file (e.g. a converted ADX) once the worker finishes
+		connect(worker, &Worker::done, this, [cleanupPath]() {
+			QFile::remove(cleanupPath);
+		});
+	}
 
 	worker->start();
 }
@@ -1016,6 +1030,7 @@ void MainWindow::on_tableWidget_customContextMenuRequested(QPoint pos)
 			contextMenu.addAction(ui->actionModifyReservedSpace);
 			if (ui->actionPreview->isEnabled()) {
 				contextMenu.addAction(ui->actionPreview);
+				contextMenu.addAction(ui->actionConvertWAV);
 			}
 		}
 		else {
@@ -1082,5 +1097,65 @@ void MainWindow::on_actionPreview_triggered()
 	if (!adxPreview->play(afs, index, filename)) {
 		// error already reported through AdxPreview::errorMessage
 	}
+}
+
+void MainWindow::on_actionConvertWAV_triggered()
+{
+	if (afs == nullptr) {
+		return; // prevent possible future errors
+	}
+
+	auto listIndex = getSelectedIndexes();
+
+	if (listIndex.size() != 1 || listIndex[0] >= afs->getFileCount()) {
+		return;
+	}
+
+	uint32_t index = listIndex[0];
+
+	QString wavPath = QFileDialog::getOpenFileName(this, "Select WAV file", QString(), "WAV files (*.wav)");
+
+	if (wavPath.isEmpty()) {
+		return;
+	}
+
+	// encode to a temporary ADX file, then reuse the existing Import flow to
+	// write it into the AFS slot (handles reserved space, refresh, etc.)
+	QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+	if (tempDir.isEmpty()) {
+		tempDir = QDir::tempPath();
+	}
+
+	QString uniqueId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	QString tempAdxPath = QDir(tempDir).filePath("AFSManager_" + uniqueId + "_converted.adx");
+
+	ADX_File::Error encodeError;
+	bool ok = ADX_File::encodeFromWAV(wavPath.toLocal8Bit().toStdString(), tempAdxPath.toLocal8Bit().toStdString(), 500, &encodeError);
+
+	if (!ok) {
+		QString reason;
+		if (encodeError.unableToOpen) {
+			reason = "unable to open the selected WAV file";
+		}
+		else if (encodeError.notWAV) {
+			reason = "the selected file is not a valid WAV file";
+		}
+		else if (encodeError.unsupportedWAV) {
+			reason = "unsupported WAV format (only 16-bit PCM mono/stereo is supported)";
+		}
+		else if (encodeError.writeFailed) {
+			reason = "unable to write the converted ADX file";
+		}
+		else {
+			reason = "unknown conversion error";
+		}
+
+		ShowError(this, "Error", "Unable to convert '" + QFileInfo(wavPath).fileName() + "':\n" + reason);
+		return;
+	}
+
+	std::string tempAdxPathStd = tempAdxPath.toLocal8Bit().toStdString();
+
+	startWorker(Type::Import, {{index, tempAdxPathStd}}, nullptr, tempAdxPath);
 }
 // ---------- end various slots ----------

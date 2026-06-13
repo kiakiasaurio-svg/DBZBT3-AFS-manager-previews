@@ -138,7 +138,6 @@ void MainWindow::openAFS(const std::string &path, bool firstCall)
 
 	drawFileList();
 	updateFreeSpaceLabel();
-	updatePreviewAvailability();
 
 	//setCursor(QCursor(Qt::ArrowCursor));
 
@@ -297,6 +296,12 @@ void MainWindow::drawFileList()
 
 	enableCellChanged = false;
 
+	// block signals (itemSelectionChanged, cellChanged, etc.) during bulk repopulation:
+	// without this, rebuilding thousands of rows/items can repeatedly trigger
+	// itemSelectionChanged -> updatePreviewAvailability, causing severe slowdowns
+	// on large AFS files
+	ui->tableWidget->blockSignals(true);
+
 	ui->tableWidget->setSortingEnabled(false);
 
 	ui->tableWidget->clear();
@@ -384,7 +389,13 @@ void MainWindow::drawFileList()
 
 	ui->tableWidget->setSortingEnabled(true);
 
+	ui->tableWidget->blockSignals(false);
+
 	enableCellChanged = true;
+
+	// selection was reset while signals were blocked, so update the Preview
+	// button state once now that signals are re-enabled
+	updatePreviewAvailability();
 }
 
 uint32_t MainWindow::getIndexFromRow(int row) const

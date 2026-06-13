@@ -8,7 +8,7 @@ class TableWidgetItem : public QTableWidgetItem
 public:
 	enum class Type
 	{
-		Integer, String
+		Integer, String, DateTime
 	} type;
 
 	TableWidgetItem(const QString &text, Type type = Type::String);

@@ -8,6 +8,7 @@
 #include <TableWidgetItem.h>
 #include <Worker.h>
 #include <AdxPreview.h>
+#include <DateTimeDelegate.h>
 
 namespace Ui
 {
@@ -74,8 +75,6 @@ private slots:
 	void errorMessage(const std::string& message);
 
 	void refreshRow(uint32_t index);
-
-	void dateTimeChanged(const QDateTime &dateTime);
 
 	void on_actionOpen_triggered();
 

@@ -1,10 +1,10 @@
 #include <MainWindow.h>
 #include <ui_MainWindow.h>
 
-#include <QDateTimeEdit>
 #include <QFileDialog>
 #include <QMimeData>
 #include <QPushButton>
+#include <QDateTime>
 #include <QDebug>
 
 #include <algorithm>
@@ -38,6 +38,11 @@ MainWindow::MainWindow(const std::string &name, const std::string &version, QWid
 	ui->menuTools->setEnabled(false);
 
 	setAcceptDrops(true);
+
+	// use a lazy editor delegate for the "Date modified" column instead of
+	// creating a persistent QDateTimeEdit widget per row (very expensive for
+	// AFS files with thousands of entries)
+	ui->tableWidget->setItemDelegateForColumn(columnID::dateModified, new DateTimeDelegate(this));
 
 	// preview wiring
 	ui->previewButton->setEnabled(false);
@@ -123,7 +128,6 @@ void MainWindow::openAFS(const std::string &path, bool firstCall)
 			return;
 		}
 	}
-
 
 	ui->menuTools->setEnabled(false);
 	delPointer(this->afs);
@@ -336,6 +340,7 @@ void MainWindow::drawFileList()
 	// generate rows
 	ui->tableWidget->setRowCount(fileCount);
 
+
 	for (uint32_t i = 0; i < fileCount; ++i) {
 		// element
 		QTableWidgetItem *item = new TableWidgetItem(QString::number(i + 1), TableWidgetItem::Type::Integer);
@@ -371,13 +376,13 @@ void MainWindow::drawFileList()
 		}
 
 		// date
-		//item = new TableWidgetItem(QString::number(vfd[i].day).rightJustified(2, '0') + "-" + QString::number(vfd[i].month).rightJustified(2, '0') + "-" + QString::number(vfd[i].year).rightJustified(4, '0') + " " + QString::number(vfd[i].hour).rightJustified(2, '0') + ":" + QString::number(vfd[i].min).rightJustified(2, '0') + ":" + QString::number(vfd[i].sec).rightJustified(2, '0'));
 		QDate date(vfd[i].year, vfd[i].month, vfd[i].day);
 		QTime time(vfd[i].hour, vfd[i].min, vfd[i].sec);
-		auto widget = new QDateTimeEdit(QDateTime(date, time));
-		populateRowCell(i, columnID::dateModified, widget);
-
-		connect(widget, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::dateTimeChanged);
+		item = new TableWidgetItem(QString(), TableWidgetItem::Type::DateTime);
+		item->setData(Qt::EditRole, QDateTime(date, time));
+		item->setData(Qt::DisplayRole, QDateTime(date, time));
+		populateRowCell(i, columnID::dateModified, item);
+		item->setFlags(item->flags() ^ Qt::ItemIsEditable);
 
 		// fileAddress
 		item = new TableWidgetItem(QString::number(vfi[i].address), TableWidgetItem::Type::Integer);
@@ -846,30 +851,11 @@ void MainWindow::refreshRow(uint32_t index)
 		}
 
 		// date
-		auto widget = (QDateTimeEdit *)ui->tableWidget->cellWidget(row, columnID::dateModified);
+		auto dateItem = ui->tableWidget->item(row, columnID::dateModified);
 		QDate date(fileDesc.year, fileDesc.month, fileDesc.day);
 		QTime time(fileDesc.hour, fileDesc.min, fileDesc.sec);
-		widget->setDateTime(QDateTime(date, time));
-	}
-}
-
-void MainWindow::dateTimeChanged(const QDateTime &dateTime)
-{
-	if (enableCellChanged) {
-		auto widget = (QDateTimeEdit *)QObject::sender();
-
-		int row = -1;
-
-		for (int i = 0; i < ui->tableWidget->rowCount(); ++i) {
-			if (ui->tableWidget->cellWidget(i, columnID::dateModified) == widget) {
-				row = i;
-				break;
-			}
-		}
-
-		if (row < afs->getFileCount()) {
-			on_tableWidget_cellChanged(row, columnID::dateModified);
-		}
+		dateItem->setData(Qt::EditRole, QDateTime(date, time));
+		dateItem->setData(Qt::DisplayRole, QDateTime(date, time));
 	}
 }
 
@@ -973,9 +959,10 @@ void MainWindow::on_tableWidget_cellChanged(int row, int column)
 			}
 		}
 		else if (column == columnID::dateModified) {
-			auto item = (QDateTimeEdit *)ui->tableWidget->cellWidget(row, column);
-			auto date = item->dateTime().date();
-			auto time = item->dateTime().time();
+			auto item = ui->tableWidget->item(row, column);
+			auto dateTime = item->data(Qt::EditRole).toDateTime();
+			auto date = dateTime.date();
+			auto time = dateTime.time();
 
 			tm tm {};
 			tm.tm_year = date.year() - 1900;

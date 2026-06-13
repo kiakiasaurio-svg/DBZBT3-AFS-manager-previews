@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Windows x64 (MSVC, Qt ${{ matrix.qt_version }})
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     strategy:
       fail-fast: false

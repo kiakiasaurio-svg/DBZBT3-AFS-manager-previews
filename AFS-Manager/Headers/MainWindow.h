@@ -112,6 +112,8 @@ private slots:
 
 	void updatePreviewAvailability();
 
+	void applySearchFilter(const QString &text);
+
 signals:
 	void done();
 

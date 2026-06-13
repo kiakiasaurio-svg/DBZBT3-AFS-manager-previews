@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QMimeData>
 #include <QPushButton>
+#include <QLineEdit>
 #include <QDateTime>
 #include <QDebug>
 
@@ -53,6 +54,9 @@ MainWindow::MainWindow(const std::string &name, const std::string &version, QWid
 	connect(adxPreview, &AdxPreview::errorMessage, this, [this](const QString &message) {
 		ShowError(this, "Error", message);
 	});
+
+	// search/filter wiring
+	connect(ui->searchBox, &QLineEdit::textChanged, this, &MainWindow::applySearchFilter);
 }
 
 MainWindow::~MainWindow()
@@ -135,6 +139,12 @@ void MainWindow::openAFS(const std::string &path, bool firstCall)
 	ui->menuTools->setEnabled(true);
 
 	adxPreview->stop();
+
+	// clear any active search filter from a previously opened AFS;
+	// blockSignals avoids triggering applySearchFilter before drawFileList runs
+	ui->searchBox->blockSignals(true);
+	ui->searchBox->clear();
+	ui->searchBox->blockSignals(false);
 
 	auto start = std::chrono::steady_clock::now();
 
@@ -401,6 +411,9 @@ void MainWindow::drawFileList()
 	// selection was reset while signals were blocked, so update the Preview
 	// button state once now that signals are re-enabled
 	updatePreviewAvailability();
+
+	// re-apply the current search filter to the newly created rows
+	applySearchFilter(ui->searchBox->text());
 }
 
 uint32_t MainWindow::getIndexFromRow(int row) const
@@ -1033,6 +1046,22 @@ void MainWindow::updatePreviewAvailability()
 
 	ui->previewButton->setEnabled(enable);
 	ui->actionPreview->setEnabled(enable);
+}
+
+void MainWindow::applySearchFilter(const QString &text)
+{
+	QString needle = text.trimmed();
+
+	for (int row = 0; row < ui->tableWidget->rowCount(); ++row) {
+		bool visible = true;
+
+		if (!needle.isEmpty()) {
+			auto item = ui->tableWidget->item(row, columnID::filename);
+			visible = (item != nullptr) && item->text().contains(needle, Qt::CaseInsensitive);
+		}
+
+		ui->tableWidget->setRowHidden(row, !visible);
+	}
 }
 
 void MainWindow::on_actionPreview_triggered()

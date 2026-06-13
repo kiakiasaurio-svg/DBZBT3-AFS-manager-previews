@@ -43,6 +43,25 @@
        </widget>
       </item>
       <item alignment="Qt::AlignRight">
+       <widget class="QLineEdit" name="searchBox">
+        <property name="minimumSize">
+         <size>
+          <width>180</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>Search by filename</string>
+        </property>
+        <property name="placeholderText">
+         <string>Search...</string>
+        </property>
+        <property name="clearButtonEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item alignment="Qt::AlignRight">
        <widget class="QPushButton" name="previewButton">
         <property name="enabled">
          <bool>false</bool>

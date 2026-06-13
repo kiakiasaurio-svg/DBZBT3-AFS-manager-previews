@@ -18,33 +18,36 @@ namespace
 	constexpr int SAMPLES_PER_FRAME = 32;
 
 	/* Clamp helper for 16-bit PCM */
-	inline int16_t clampToInt16(double value)
+	inline int16_t clampToInt16(int32_t value)
 	{
-		if (value > 32767.0) {
+		if (value > 32767) {
 			return 32767;
 		}
-		if (value < -32768.0) {
+		if (value < -32768) {
 			return -32768;
 		}
 		return static_cast<int16_t>(value);
 	}
 
 	/* Compute the type-03 ADX prediction coefficients from the highpass cutoff frequency.
-	 * This matches the well-known formula used by standard CRI ADX (type 03) decoders. */
-	void computeCoefficients(uint32_t sampleRate, uint16_t highpassFrequency, double &coeff1, double &coeff2)
+	 * Matches the reference CRI ADX (type 03) decoder formula: 12-bit fixed point
+	 * coefficients derived from the highpass cutoff and sample rate. */
+	void computeCoefficients(uint32_t sampleRate, uint16_t highpassFrequency, int32_t &coef1, int32_t &coef2)
 	{
 		if (sampleRate == 0) {
-			coeff1 = 0.0;
-			coeff2 = 0.0;
+			coef1 = 0;
+			coef2 = 0;
 			return;
 		}
 
 		double x = 2.0 * PI * static_cast<double>(highpassFrequency) / static_cast<double>(sampleRate);
-		double y = std::sqrt(2.0) - std::cos(x);
-		double z = y - std::sqrt((y + 1.0) * (1.0 - y));
 
-		coeff1 = z * 2.0;
-		coeff2 = -(z * z);
+		double a = std::sqrt(2.0) - std::cos(x);
+		double b = std::sqrt(2.0) - 1.0;
+		double c = (a - std::sqrt((a + b) * (a - b))) / b;
+
+		coef1 = static_cast<int32_t>(std::floor(c * 8192.0));
+		coef2 = static_cast<int32_t>(std::floor(c * c * -4096.0));
 	}
 }
 
@@ -186,8 +189,8 @@ bool ADX_File::decode(const std::vector<uint8_t> &raw)
 		return false;
 	}
 
-	double coeff1, coeff2;
-	computeCoefficients(sampleRateValue, highpassFrequency, coeff1, coeff2);
+	int32_t coef1, coef2;
+	computeCoefficients(sampleRateValue, highpassFrequency, coef1, coef2);
 
 	channelCount = channels;
 	sampleRate = sampleRateValue;
@@ -196,8 +199,8 @@ bool ADX_File::decode(const std::vector<uint8_t> &raw)
 
 	pcm.assign(static_cast<size_t>(sampleCount) * channelCount, 0);
 
-	std::vector<double> hist1(channelCount, 0.0);
-	std::vector<double> hist2(channelCount, 0.0);
+	std::vector<int16_t> hist1(channelCount, 0);
+	std::vector<int16_t> hist2(channelCount, 0);
 
 	size_t bytesPerFrame = static_cast<size_t>(frameSize);
 
@@ -217,7 +220,8 @@ bool ADX_File::decode(const std::vector<uint8_t> &raw)
 				break; // dummy/terminator frame reached
 			}
 
-			int16_t scale = static_cast<int16_t>(rawScale);
+			/* the +1 is important on quiet ADXs (reference decoder behavior) */
+			int32_t scale = static_cast<int32_t>(rawScale) + 1;
 
 			for (int n = 0; n < SAMPLES_PER_FRAME && sampleIndex < sampleCount; ++n) {
 				size_t bytePos = pos + 2 + (n / 2);
@@ -236,14 +240,19 @@ bool ADX_File::decode(const std::vector<uint8_t> &raw)
 					nibble = static_cast<int8_t>(nibble - 16);
 				}
 
-				double sample = static_cast<double>(scale) * static_cast<double>(nibble) + coeff1 * hist1[ch] + coeff2 * hist2[ch];
+				int32_t sampleDelta = static_cast<int32_t>(nibble) * scale;
 
-				int16_t out = clampToInt16(sample);
+				int32_t predicted12 = coef1 * static_cast<int32_t>(hist1[ch]) + coef2 * static_cast<int32_t>(hist2[ch]);
+				int32_t predicted = predicted12 >> 12;
+
+				int32_t sampleRaw = predicted + sampleDelta;
+
+				int16_t out = clampToInt16(sampleRaw);
 
 				pcm[static_cast<size_t>(sampleIndex) * channelCount + ch] = out;
 
 				hist2[ch] = hist1[ch];
-				hist1[ch] = sample;
+				hist1[ch] = out;
 
 				++sampleIndex;
 			}

@@ -170,14 +170,16 @@ bool ADX_File::decode(const std::vector<uint8_t> &raw)
 		return false;
 	}
 
-	if (copyrightOffset < 2 || static_cast<size_t>(copyrightOffset) + 2 > raw.size()) {
+	if (copyrightOffset < 2 || static_cast<size_t>(copyrightOffset) + 4 > raw.size()) {
 		error.corruptedContent = true;
 		return false;
 	}
 
-	/* The copyright offset field stores the byte position of the "(c)CRI" tag, relative to
-	 * byte 2 of the file. Audio data therefore starts right at (copyrightOffset + 2). */
-	size_t dataStart = static_cast<size_t>(copyrightOffset) + 2;
+	/* The copyright offset field stores a value such that audio data starts at
+	 * (copyrightOffset + 4); the "(c)CRI" copyright tag sits at
+	 * (copyrightOffset - 2) .. (copyrightOffset + 2). This matches the standard
+	 * CRI ADX header layout used by reference decoders. */
+	size_t dataStart = static_cast<size_t>(copyrightOffset) + 4;
 
 	if (dataStart >= raw.size()) {
 		error.corruptedContent = true;

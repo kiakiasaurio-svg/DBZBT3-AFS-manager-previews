@@ -1,6 +1,8 @@
 #include <TableWidgetItem.h>
 #include <Shared.h>
 
+#include <QDateTime>
+
 using namespace Shared;
 
 TableWidgetItem::TableWidgetItem(const QString &text, TableWidgetItem::Type type) : QTableWidgetItem(text), type(type)

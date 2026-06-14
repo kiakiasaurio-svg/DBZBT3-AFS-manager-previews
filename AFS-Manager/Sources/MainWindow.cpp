@@ -3,6 +3,7 @@
 
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QMimeData>
 #include <QPushButton>
 #include <QLineEdit>
@@ -22,6 +23,7 @@
 #include <ReservedSpaceDialog.h>
 
 #include <ADXCore.h>
+#include <ISOCore.h>
 
 using namespace Shared;
 
@@ -144,6 +146,11 @@ void MainWindow::openAFS(const std::string &path, bool firstCall)
 	delPointer(this->afs);
 	this->afs = afs;
 	ui->menuTools->setEnabled(true);
+
+	// opening a standalone AFS clears any ISO association
+	currentISOPath.clear();
+	currentISOEntry = ISO_File::FileEntry{};
+	ui->actionSaveAFStoISO->setEnabled(false);
 
 	adxPreview->stop();
 
@@ -668,7 +675,31 @@ void MainWindow::toAdjust_p1(bool init)
 				buttons |= QMessageBox::NoToAll;
 			}
 
-			reply = ShowError(this, "Error", "Not enought space to import over '" + QString::fromLocal8Bit(afs->getFilename(index).c_str()) + "'...\nDo you to want to auto-adjust reserved space?", buttons);
+			auto list = worker->getList();
+			auto iter = list.find(index);
+
+			QString filename = QString::fromLocal8Bit(afs->getFilename(index).c_str());
+			QString sizeInfo;
+
+			if (iter != list.end()) {
+				auto fileSize = getFileSize(iter->second);
+				auto rs = afs->getReservedSpace(index);
+				auto reservedKB = rs.second / 1024;
+				auto fileKB = fileSize / 1024;
+
+				sizeInfo = QString("\n\nFile size: %1 KB\nReserved space: %2 KB\nOverflow: %3 KB")
+							.arg(fileKB)
+							.arg(reservedKB)
+							.arg(fileKB - reservedKB);
+			}
+
+			reply = ShowError(this, "Not enough space",
+				"Cannot import over '" + filename + "': the file is larger than the slot's reserved space." + sizeInfo +
+				"\n\n⚠ WARNING for PS2/ISO modding: clicking YES will trigger a REBUILD which changes all internal AFS offsets. "
+				"If you are patching an ISO, this WILL break audio and other data unless you also update the ISO filesystem. "
+				"\n\nClick YES only if you are working on a standalone AFS file (not inside a PS2 ISO)."
+				"\nClick NO to skip this file and keep the AFS intact.",
+				buttons);
 		}
 
 		if (reply == QMessageBox::Yes) {
@@ -1061,6 +1092,154 @@ void MainWindow::updatePreviewAvailability()
 
 	ui->previewButton->setEnabled(enable);
 	ui->actionPreview->setEnabled(enable);
+}
+
+void MainWindow::on_actionOpenISO_triggered()
+{
+	QString isoPath = QFileDialog::getOpenFileName(this, "Open PS2 ISO", QString(), "PS2 ISO files (*.iso *.img *.bin)");
+
+	if (isoPath.isEmpty()) {
+		return;
+	}
+
+	ShowInfo(this, "Opening ISO", "Scanning ISO filesystem...\nThis may take a moment for large ISOs.");
+
+	ISO_File iso(isoPath.toLocal8Bit().toStdString());
+
+	if (!iso.isOpen()) {
+		auto err = iso.getError();
+		QString reason;
+		if (err.unableToOpen)      reason = "could not open the file";
+		else if (err.notISO)       reason = "not a valid PS2 UDF ISO";
+		else if (err.corruptedContent) reason = "corrupted or unrecognized UDF structure";
+		else                       reason = "unknown error";
+
+		ShowError(this, "Error", "Cannot open ISO:\n" + reason);
+		return;
+	}
+
+	// Collect all .afs files found in the ISO
+	const auto &files = iso.getFiles();
+	QStringList afsList;
+	std::vector<ISO_File::FileEntry> afsEntries;
+
+	for (const auto &entry : files) {
+		std::string lower = entry.name;
+		std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+		if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".afs") {
+			afsList << QString::fromLocal8Bit(entry.fullPath.c_str()) +
+						QString(" (%1 MB)").arg(static_cast<double>(entry.size) / 1024.0 / 1024.0, 0, 'f', 1);
+			afsEntries.push_back(entry);
+		}
+	}
+
+	if (afsList.isEmpty()) {
+		ShowError(this, "Error", "No AFS files found inside the ISO.");
+		return;
+	}
+
+	// Let the user pick which AFS to open
+	bool ok = false;
+	QString chosen = QInputDialog::getItem(this, "Select AFS", "AFS files found in ISO:", afsList, 0, false, &ok);
+
+	if (!ok || chosen.isEmpty()) {
+		return;
+	}
+
+	int chosenIndex = afsList.indexOf(chosen);
+	if (chosenIndex < 0 || chosenIndex >= static_cast<int>(afsEntries.size())) {
+		return;
+	}
+
+	const ISO_File::FileEntry &entry = afsEntries[static_cast<size_t>(chosenIndex)];
+
+	// Extract the chosen AFS to a temp file
+	QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+	QString uniqueId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	QString baseName = QString::fromLocal8Bit(entry.name.c_str());
+	QString tempAfsPath = QDir(tempDir).filePath("AFSManager_" + uniqueId + "_" + baseName);
+
+	ISO_File::Error extractError;
+	if (!iso.extractFile(entry, tempAfsPath.toLocal8Bit().toStdString(), &extractError)) {
+		ShowError(this, "Error", "Failed to extract AFS from ISO.");
+		return;
+	}
+
+	// Open the extracted AFS normally
+	openAFS(tempAfsPath.toLocal8Bit().toStdString());
+
+	if (this->afs == nullptr) {
+		QFile::remove(tempAfsPath);
+		return;
+	}
+
+	// Store ISO association so "Save AFS to ISO" knows where to write back
+	currentISOPath  = isoPath.toLocal8Bit().toStdString();
+	currentISOEntry = entry;
+	ui->actionSaveAFStoISO->setEnabled(true);
+
+	// Show a status hint
+	ui->afsName->setText(ui->afsName->text() +
+		" [ISO: " + QString::fromLocal8Bit(QFileInfo(isoPath).fileName().toLocal8Bit()) + "]");
+}
+
+void MainWindow::on_actionSaveAFStoISO_triggered()
+{
+	if (afs == nullptr || currentISOPath.empty()) {
+		return;
+	}
+
+	// Confirm with the user
+	auto reply = ShowInfo(this, "Save AFS to ISO",
+		"This will write the current AFS directly into the ISO at its original sector.\n"
+		"The ISO file will be modified in-place — no LBA offsets will change.\n\n"
+		"ISO: " + QString::fromLocal8Bit(QFileInfo(QString::fromLocal8Bit(currentISOPath.c_str())).fileName().toLocal8Bit()) + "\n"
+		"AFS slot: " + QString::fromLocal8Bit(currentISOEntry.fullPath.c_str()) + "\n\n"
+		"Continue?",
+		QMessageBox::Yes | QMessageBox::No);
+
+	if (reply != QMessageBox::Yes) {
+		return;
+	}
+
+	// First, commit the AFS to its temp file so we have the latest bytes on disk
+	// (importFile already writes directly to the AFS file on disk, so afs->afsName
+	// is always up-to-date — we just need to write that file back into the ISO)
+	ISO_File iso(currentISOPath);
+
+	if (!iso.isOpen()) {
+		ShowError(this, "Error", "Cannot open ISO for writing.");
+		return;
+	}
+
+	ISO_File::Error writeError;
+	bool ok = iso.replaceFile(currentISOEntry, afs->afsName, &writeError);
+
+	if (!ok) {
+		QString reason;
+		if (writeError.fileTooLarge) {
+			uint64_t maxMB = (((currentISOEntry.size + 2047) / 2048) * 2048) / 1024 / 1024;
+			reason = QString("The modified AFS is larger than the original slot in the ISO.\n"
+							 "Maximum allowed size: %1 MB.\n\n"
+							 "To fit a larger AFS you would need to rebuild the ISO — "
+							 "but that would change LBAs and break the game.\n"
+							 "Try keeping your replacements within the existing reserved space of each slot.").arg(maxMB);
+		}
+		else if (writeError.writeFailed) {
+			reason = "Write failed (is the ISO read-only or in use by another program?)";
+		}
+		else {
+			reason = "Unknown error";
+		}
+
+		ShowError(this, "Error", "Could not save AFS to ISO:\n\n" + reason);
+		return;
+	}
+
+	ShowInfo(this, "Success",
+		"AFS saved to ISO successfully!\n\n"
+		"The ISO has been patched in-place. Audio and all other data should work correctly.\n"
+		"No rebuild was needed — all LBA offsets are unchanged.");
 }
 
 void MainWindow::applySearchFilter(const QString &text)

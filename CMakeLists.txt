@@ -108,6 +108,11 @@ set(ADXCORE_HEADERS_PATH ${ADXCORE_PATH}/Headers)
 set(ADXCORE_RESOURCES_PATH ${ADXCORE_PATH}/Resources)
 set(ADXCORE_SOURCES_PATH ${ADXCORE_PATH}/Sources)
 
+# Define ISOCore paths
+set(ISOCORE_PATH Libraries/ISOCore)
+set(ISOCORE_HEADERS_PATH ${ISOCORE_PATH}/Headers)
+set(ISOCORE_SOURCES_PATH ${ISOCORE_PATH}/Sources)
+
 # TODO: Define CTECore paths
 
 # Define AFL-Converter paths
@@ -150,6 +155,9 @@ set(AFSCORE_SOURCES ${AFSCORE_SOURCES_PATH}/AFSCore.cpp)
 set(ADXCORE_RESOURCES ${ADXCORE_RESOURCES_PATH}/ADXCore.rc)
 set(ADXCORE_SOURCES ${ADXCORE_SOURCES_PATH}/ADXCore.cpp)
 
+# Define ISOCore files
+set(ISOCORE_SOURCES ${ISOCORE_SOURCES_PATH}/ISOCore.cpp)
+
 # Define AFL-Converter files
 set(AFL_CONVERTER_RESOURCES ${AFL_CONVERTER_RESOURCES_PATH}/AFL-Converter.rc)
 set(AFL_CONVERTER_SOURCES ${AFL_CONVERTER_SOURCES_PATH}/Main.cpp)
@@ -189,6 +197,10 @@ add_library(ADXCore SHARED ${ADXCORE_SOURCES} ${ADXCORE_RESOURCES})
 target_include_directories(ADXCore PUBLIC ${ADXCORE_HEADERS_PATH})
 target_link_libraries(ADXCore Shared)
 
+# ISOCore (static - no DLL needed, used only by AFS-Manager)
+add_library(ISOCore STATIC ${ISOCORE_SOURCES})
+target_include_directories(ISOCore PUBLIC ${ISOCORE_HEADERS_PATH})
+
 # TODO: CTECore
 
 # AFL-Converter
@@ -199,6 +211,6 @@ target_link_libraries(AFL-Converter MessageBox AFLCore)
 # AFS-Manager
 add_executable(AFS-Manager ${AFS_MANAGER_Q_OBJECTS} ${AFS_MANAGER_FORMS} ${AFS_MANAGER_SOURCES} ${AFS_MANAGER_RESOURCES})
 target_include_directories(AFS-Manager PUBLIC ${AFS_MANAGER_HEADERS_PATH})
-target_link_libraries(AFS-Manager MessageBox AFSCore ADXCore Qt5::Multimedia)
+target_link_libraries(AFS-Manager MessageBox AFSCore ADXCore ISOCore Qt5::Multimedia)
 
 # TODO: CTE-Plugin

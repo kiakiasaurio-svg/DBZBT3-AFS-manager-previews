@@ -9,6 +9,7 @@
 #include <Worker.h>
 #include <AdxPreview.h>
 #include <DateTimeDelegate.h>
+#include <ISOCore.h>
 
 namespace Ui
 {
@@ -55,6 +56,12 @@ private:
 	Worker *oldWorker;
 
 	AdxPreview *adxPreview;
+
+	/* ISO support: when an AFS was opened from inside an ISO, these track
+	 * the ISO path and which file entry inside it corresponds to the AFS,
+	 * so "Save AFS to ISO" can write it back in-place. */
+	std::string currentISOPath;
+	ISO_File::FileEntry currentISOEntry;
 
 public slots:
 	void openAFS(const std::string &path, bool firstCall = true);
@@ -111,6 +118,10 @@ private slots:
 	void on_actionPreview_triggered();
 
 	void on_actionConvertWAV_triggered();
+
+	void on_actionOpenISO_triggered();
+
+	void on_actionSaveAFStoISO_triggered();
 
 	void updatePreviewAvailability();
 

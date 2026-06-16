@@ -84,7 +84,7 @@ private:
 
 	bool readSector(uint64_t lba, std::vector<uint8_t> &buf) const;
 
-	bool parseDirectory(uint64_t lba, uint64_t length, uint32_t partitionStart, const std::string &parentPath);
+	bool parseDirectory(uint64_t lba, uint64_t length, uint64_t partBase, const std::string &parentPath);
 
 private:
 	std::string isoPath;

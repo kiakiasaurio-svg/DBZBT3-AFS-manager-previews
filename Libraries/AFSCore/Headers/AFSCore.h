@@ -56,12 +56,13 @@ public:
 		char name[FILENAME_SIZE];
 
 	public:
-		uint16_t year;
-		uint16_t month;
-		uint16_t day;
-		uint16_t hour;
-		uint16_t min;
-		uint16_t sec;
+		uint16_t year;   // 2 bytes (year is uint16 in AFS format)
+		uint8_t  month;  // 1 byte
+		uint8_t  day;    // 1 byte
+		uint8_t  hour;   // 1 byte
+		uint8_t  min;    // 1 byte
+		uint8_t  sec;    // 1 byte
+		uint8_t  unused; // 1 byte padding (real AFS format has 44 bytes per entry: 32+2+1+1+1+1+1+1+4=44)
 		uint32_t size;
 	};
 

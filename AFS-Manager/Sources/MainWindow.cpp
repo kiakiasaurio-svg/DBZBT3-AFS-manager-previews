@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
+#include <QCloseEvent>
 #include <QMimeData>
 #include <QPushButton>
 #include <QLineEdit>
@@ -32,7 +33,7 @@ enum columnID
 	number, filename, size, reservedSpace, afterRebuild, dateModified, address
 };
 
-MainWindow::MainWindow(const std::string &name, const std::string &version, QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow), afs(nullptr), enableCellChanged(false), oldWorker(nullptr), adxPreview(new AdxPreview(this))
+MainWindow::MainWindow(const std::string &name, const std::string &version, QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow), afs(nullptr), enableCellChanged(false), oldWorker(nullptr), adxPreview(new AdxPreview(this)), isoModified(false)
 {
 	// connect actions to context menu and setup ui
 	ui->setupUi(this);
@@ -148,8 +149,13 @@ void MainWindow::openAFS(const std::string &path, bool firstCall)
 	ui->menuTools->setEnabled(true);
 
 	// opening a standalone AFS clears any ISO association
+	if (!tempAFSPath.empty()) {
+		QFile::remove(QString::fromLocal8Bit(tempAFSPath.c_str()));
+		tempAFSPath.clear();
+	}
 	currentISOPath.clear();
 	currentISOEntry = ISO_File::FileEntry{};
+	isoModified = false;
 	ui->actionSaveAFStoISO->setEnabled(false);
 
 	adxPreview->stop();
@@ -849,6 +855,11 @@ void MainWindow::errorMessage(const std::string &message)
 
 void MainWindow::refreshRow(uint32_t index)
 {
+	// mark the ISO as having unsaved changes
+	if (!currentISOPath.empty()) {
+		isoModified = true;
+	}
+
 	auto list = ui->tableWidget->findItems(QString::number(index + 1), Qt::MatchExactly);
 
 	int row = -1;
@@ -1094,6 +1105,39 @@ void MainWindow::updatePreviewAvailability()
 	ui->actionPreview->setEnabled(enable);
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+	if (isoModified && !currentISOPath.empty()) {
+		auto reply = ShowInfo(this, "Unsaved changes",
+			"You have modified the AFS but have not saved it to the ISO yet.\n\n"
+			"If you close now, your changes will be LOST.\n\n"
+			"Do you want to save to ISO before closing?",
+			QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+
+		if (reply == QMessageBox::Cancel) {
+			event->ignore();
+			return;
+		}
+
+		if (reply == QMessageBox::Yes) {
+			on_actionSaveAFStoISO_triggered();
+			// if save failed (isoModified still true), don't close
+			if (isoModified) {
+				event->ignore();
+				return;
+			}
+		}
+	}
+
+	// clean up the temporary AFS file extracted from the ISO
+	if (!tempAFSPath.empty()) {
+		QFile::remove(QString::fromLocal8Bit(tempAFSPath.c_str()));
+		tempAFSPath.clear();
+	}
+
+	event->accept();
+}
+
 void MainWindow::on_actionOpenISO_triggered()
 {
 	QString isoPath = QFileDialog::getOpenFileName(this, "Open PS2 ISO", QString(), "PS2 ISO files (*.iso *.img *.bin)");
@@ -1176,6 +1220,8 @@ void MainWindow::on_actionOpenISO_triggered()
 	// Store ISO association so "Save AFS to ISO" knows where to write back
 	currentISOPath  = isoPath.toLocal8Bit().toStdString();
 	currentISOEntry = entry;
+	tempAFSPath     = tempAfsPath.toLocal8Bit().toStdString();
+	isoModified     = false;
 	ui->actionSaveAFStoISO->setEnabled(true);
 
 	// Show a status hint
@@ -1240,6 +1286,8 @@ void MainWindow::on_actionSaveAFStoISO_triggered()
 		"AFS saved to ISO successfully!\n\n"
 		"The ISO has been patched in-place. Audio and all other data should work correctly.\n"
 		"No rebuild was needed — all LBA offsets are unchanged.");
+
+	isoModified = false;
 }
 
 void MainWindow::applySearchFilter(const QString &text)

@@ -62,6 +62,8 @@ private:
 	 * so "Save AFS to ISO" can write it back in-place. */
 	std::string currentISOPath;
 	ISO_File::FileEntry currentISOEntry;
+	std::string tempAFSPath;  // path of the temp AFS extracted from ISO
+	bool isoModified;         // true if AFS was changed since last "Save AFS to ISO"
 
 public slots:
 	void openAFS(const std::string &path, bool firstCall = true);
@@ -122,6 +124,9 @@ private slots:
 	void on_actionOpenISO_triggered();
 
 	void on_actionSaveAFStoISO_triggered();
+
+protected:
+	void closeEvent(QCloseEvent *event) override;
 
 	void updatePreviewAvailability();
 

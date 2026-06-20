@@ -182,6 +182,7 @@ bool AFS_File::loadFileDesc(std::fstream &inFile, bool constructor)
 		inFile.read(reinterpret_cast<char *>(&fileDesc[i].hour), sizeof(FileDesc::hour));
 		inFile.read(reinterpret_cast<char *>(&fileDesc[i].min), sizeof(FileDesc::min));
 		inFile.read(reinterpret_cast<char *>(&fileDesc[i].sec), sizeof(FileDesc::sec));
+		inFile.read(reinterpret_cast<char *>(&fileDesc[i].unused), sizeof(FileDesc::unused));
 		inFile.read(reinterpret_cast<char *>(&fileDesc[i].size), sizeof(FileDesc::size));
 	}
 
@@ -333,6 +334,7 @@ bool AFS_File::commitFileDesc() const
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].hour), sizeof(FileDesc::hour));
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].min), sizeof(FileDesc::min));
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].sec), sizeof(FileDesc::sec));
+		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].unused), sizeof(FileDesc::unused));
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].size), sizeof(FileDesc::size));
 	}
 
@@ -654,6 +656,7 @@ bool AFS_File::rebuild(const std::string &path, char *&content)
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].hour), sizeof(FileDesc::hour));
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].min), sizeof(FileDesc::min));
 		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].sec), sizeof(FileDesc::sec));
+		outFile.write(reinterpret_cast<const char *>(&fileDesc[i].unused), sizeof(FileDesc::unused));
 
 		outFile.write(reinterpret_cast<const char *>(&fileInfo[i].size), sizeof(FileInfo::size)); // to have an updated value
 	}
